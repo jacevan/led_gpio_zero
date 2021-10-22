@@ -3,7 +3,7 @@ To run the flask API and see the code represented in the browser through the p5 
 - Go into the directory, `cd led_gpio_zero`
 - Set up virtual environment, `python3 -m venv venv`
 - Activate the virtual environment, (linux/mac) `source venv/bin/activate` - (windows powershell) `.\venv\Scripts\activate`
-- Install requirements, `pip install -r requirements.txt`
+- Install requirements, `pip3 install -r requirements.txt`
 - Set the flask environment variable (linux/mac) `export FLASK_APP=app` - (windows powershell) `$ENV:FLASK_APP="app"`
 - Set the mock pins environment variable (linux/mac) `export GPIOZERO_PIN_FACTORY=mock` - (windows powershell) `ENV:GPIOZERO_PIN_FACTORY="mock"`
 - Run the API, `flask run`
