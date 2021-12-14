@@ -1,7 +1,7 @@
 function getData() {
   d3.json('./gpio', (data) => {
     const numPins = Object.keys(data).length;
-    renderPi(true, numPins);
+    renderPi(Math.random() < .5, numPins);
   });
 }
 setInterval(() => {
@@ -18,6 +18,8 @@ function renderPi (isOn, pinCount) {
   const height = container.node().getBoundingClientRect().height;
   const pinRadius = 6; // TODO - make this adjust dynamically to the height to ensure all pins fit
   const ledRadius = 25;
+  const groundOffset = 20;
+  const boardCircleRadius = 12;
 
   const piSvg = container.select('.piSvg')
     .attr('width', width)
@@ -34,10 +36,108 @@ function renderPi (isOn, pinCount) {
       .attr("rx", 8)
       .merge(outline)
       .attr('width', d => d.piWidth)
-      .attr('height', d => d.piHeight);
+      .attr('height', d => d.piHeight)
     outline.exit().remove();
+
+    const arc =  d3.arc()
+        .outerRadius(boardCircleRadius)
+        .innerRadius(boardCircleRadius / 2)
+        .startAngle(0)
+        .endAngle(2 * Math.PI);    
+
+    const circles = boardGroup.selectAll('.boardCircle')
+      .data([boardCircleRadius * 2, groupData.piWidth - (boardCircleRadius * 2)]);
+    circles.enter()
+      .append('path')
+      .attr('class', 'boardCircle')
+      .merge(circles)
+      .attr('d', arc)
+      .attr('transform', cx => `translate(${cx},${groupData.piHeight - (boardCircleRadius * 2)})`)
+    circles.exit().remove();
   }
 
+  const drawGround = (boardGroup) => {
+    if (boardGroup.selectAll('.groundGroup').empty()) {
+      const groundGroup = boardGroup.append('g')
+        .attr('class', 'groundGroup')
+        .attr('transform', `translate(${(width * 3/4) - groundOffset}, ${groundOffset})`);
+      groundGroup.append('line')
+        .attr('class', 'groundLine')
+        .attr('x1', 0)
+        .attr('x2', 0)
+        .attr('y1', 0)
+        .attr('y2', (getBoardHeight(height) - (2 * groundOffset)));
+      groundGroup.append('text')
+        .attr('class', 'groundText')
+        .attr('x', -6)
+        .attr('y', -6)
+        .attr('transform', 'rotate(90)')
+        .text('ground');
+    }
+  }
+
+  const drawConnectingWires = (boardGroup) => {
+    // connections 
+    //  - last pin to ground
+    //  - gpio pin to led left pin
+    //  - ground to led right pin 
+    // [[sourceElement, targetElement, startAtBottom, isTargetGround],...]
+    const connectionsData = [[
+      d3.select(boardGroup.selectAll('.pinGroup').nodes()[5]),
+      d3.select(boardGroup.selectAll('.ledPin').nodes()[0]),
+      false,
+      false
+    ], [
+      d3.select(boardGroup.selectAll('.pinGroup').nodes()[pinCount - 1]),
+      d3.select(boardGroup.selectAll('.groundLine').nodes()[0]),
+      false,
+      true
+    ], [
+      d3.select(boardGroup.selectAll('.ledPin').nodes()[1]),
+      d3.select(boardGroup.selectAll('.groundLine').nodes()[0]),
+      true,
+      true
+    ]];
+
+    const getX2 = (source, target, startAtBottom) => {
+      const sourceRect = source.node().getBoundingClientRect();
+      const targetRect = target.node().getBoundingClientRect();
+      const sourceX = sourceRect.x + (sourceRect.width / 2);
+      return targetRect.x - sourceX;
+    }
+
+    const getY2 = (source, target, startAtBottom, targetIsGround) => {
+      if (targetIsGround) {
+        return 0;
+      }
+      const sourceRect = source.node().getBoundingClientRect();
+      const targetRect = target.node().getBoundingClientRect();
+      const sourceY = sourceRect.y + (sourceRect.height / (startAtBottom ? 1 : 2));
+      return (targetRect.y + targetRect.height) - sourceY;
+    }
+
+    const getTranslate = (board, source, startAtBottom) => {
+      const boardRect = board.node().getBoundingClientRect();
+      const sourceRect = source.node().getBoundingClientRect();
+      const x = sourceRect.x - boardRect.x + (sourceRect.width / 2);
+      const y = sourceRect.y - boardRect.y + (sourceRect.height / (startAtBottom ? 1 : 2));
+      return `translate(${x},${y})`;
+    }
+
+    const wires = boardGroup.selectAll('.connectionWire')
+      .data(connectionsData);
+    wires.enter()
+      .append('line')
+      .attr('class', 'connectionWire')
+      .attr('transform', (d) => getTranslate(boardGroup, d[0], d[2]))
+      .attr('x1', 0)
+      .attr('y1', 0)
+      .attr('x2', d => getX2(...d))
+      .attr('y2', d => getY2(...d));
+    wires.exit().remove();
+  }
+
+  // return is the coordinated of the left and right pins
   const drawLED = (boardGroup, ledData) => {
     const ledGroup = boardGroup.selectAll('.ledGroup')
       .data([ledData]);
@@ -81,7 +181,6 @@ function renderPi (isOn, pinCount) {
           .attr('x2', d => d.x)
           .attr('y1', 0)
           .attr('y2', d => d.height);
-        
         pins.exit().remove();
       });
   }
@@ -93,7 +192,7 @@ function renderPi (isOn, pinCount) {
       .append('g')
       .attr('class', 'pinsGroup')
       .merge(pinsGroup)
-      .attr('transform', (d) => `translate(${d.piWidth - (pinRadius * 5.75)}, ${pinRadius})`)
+      .attr('transform', (d) => `translate(${d.piWidth - (pinRadius * 6.25)}, ${pinRadius * 2})`)
       .each(function (d) {
         const pinsOutline = d3.select(this).selectAll('.pinsOutline')
           .data([d]);
@@ -148,14 +247,15 @@ function renderPi (isOn, pinCount) {
     pinsGroup.exit().remove();
   }
 
-  const drawBoard = () => {
-    const getBoardWidth = (totalWidth) => {
-      return totalWidth * (1 / 2);
-    }
+  const getBoardWidth = (totalWidth) => {
+    return totalWidth * (1 / 2);
+  }
 
-    const getBoardHeight = (totalHeight) => {
-      return totalHeight * (3 / 4);
-    }
+  const getBoardHeight = (totalHeight) => {
+    return totalHeight * (3 / 4);
+  }
+
+  const drawBoard = () => {
     const boardGroup = piSvg.selectAll('.piGroup')
       .data([{width, height}]);
     boardGroup.enter()
@@ -170,12 +270,14 @@ function renderPi (isOn, pinCount) {
         }; 
         const ledData = {
           x: getBoardWidth(width) + 50,
-          y: 0,
+          y: 40,
           isOn: isOn
         }
         drawOutline(d3.select(this), piData);
         drawPins(d3.select(this), piData);
         drawLED(d3.select(this), ledData);
+        drawGround(d3.select(this));
+        drawConnectingWires(d3.select(this));
       });
     boardGroup.exit().remove();
   }
